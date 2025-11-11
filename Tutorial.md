@@ -312,11 +312,7 @@ Extracting and running F* now yields:
 ```
 This error occurs because the F* specification of the `>>`-function expects its right-hand argument to be smaller than the total number of bits of the employed integer type. This is already the case in our code, but F* is not able to figure out that the value `shift` is indeed small enough.
 
-To simplify things, we can first remove the lines `u >>= shift;`
-and `v >>= shift;`, which are in fact useless because
-we shift `u` by  `u.trailing_zeros()` and `v` by `v.trailing_zeros()` afterwards anyway.
-
-Now, all right-shifts in our code are by the number of trailing zeros of the given integer. That number of zeros can in principle be equal to the number of bits of the integer (which would be to large for `>>`), but only if the integer is `0`. So we can help F* to figure out that everything is okay by adding the following lemma to `Core_models.Num.fsti`:
+Most right-shifts in our code are by the number of trailing zeros of the given integer. That number of zeros can in principle be equal to the number of bits of the integer (which would be to large for `>>`), but only if the integer is `0`. So we can help F* to figure out that everything is okay by adding the following lemma to `Core_models.Num.fsti`:
 ```
 val trailing_zeros_lt_bits #t (a: int_t t):
     Lemma (requires (v a <> 0))
@@ -326,30 +322,30 @@ val trailing_zeros_lt_bits #t (a: int_t t):
 The lemma states that the number of trailing zeros is smaller than the total number of bits whenever the integer is nonzero.
 The `SMTPat`-annotation tells F* that this lemma should be considered whenever a problem contains the `trailing_zeros` function.
 
-This resolves the error around `>>`. The next error we get is:
+However, there are also two occurrences of `>>` where we shift `u` and `v` by `(u | v).trailing_zeros()`. For these, we need the following additional lemmas:
 ```
-* Error 19 at Gcd.fst(41,14-41,18):
-  - Subtyping check failed
-  - Expected type
-      o:
-      (Rust_primitives.Integers.u8 & Rust_primitives.Integers.u8)
-        { (let _, _ = o in
-            true) /\
-          (let _, _ = o in
-            Rust_primitives.Hax.Int.from_machine (Rust_primitives.Integers.mk_u32
-                  0)
-            <:
-            Hax_lib.Int.t_Int) <
-          (let _, _ = temp_0_ in
-            Rust_primitives.Hax.Int.from_machine (Rust_primitives.Integers.mk_u32
-                  0)
-            <:
-            Hax_lib.Int.t_Int) }
-    got type Rust_primitives.Integers.u8 & Rust_primitives.Integers.u8
+val trailing_zeros_band_le_left #t (a b : int_t t):
+    Lemma (v (trailing_zeros (a |. b)) <= v (trailing_zeros a))
+          [SMTPat (trailing_zeros (a |. b))]
+
+val trailing_zeros_band_le_right #t (a b : int_t t):
+    Lemma (v (trailing_zeros (a |. b)) <= v (trailing_zeros b))
+          [SMTPat (trailing_zeros (a |. b))]
 ```
-We have seen this error before for the euclidean algorithm.
-It means that we have forgotten to annotate the while loop with
-a measure to prove termination. Let us first think about which termination measure we can assign to this while-loop:
+These lemmas state that the trailing zeros of `a |. b` will always be at most as many as the trailing zeros of `a`, and similarly for `b`. Via `SMTPat`, we tell F* to use this lemma when it encounters expressions of the form `trailing_zeros (a |. b)`.
+
+Since our first lemma applies only when the integer is nonzero, we also need to enable F* to know that our integers do not become zero by shifting:
+```
+val shift_right_trailing_zeros_nonzero #t (a: int_t t) (b : u32):
+    Lemma (requires (v a <> 0) && (v b <= v (trailing_zeros a)))
+          (ensures (v (shift_right a b) <> 0))
+          [SMTPat (shift_right a b)]
+```
+
+This resolves the error around `>>`.
+
+Finally, we need to add a termination measure to the while-loop.
+This is the loop:
 ```
 while u != v {
 
@@ -366,7 +362,7 @@ while u != v {
 
 Here is a summary of what the while loop is doing: It subtracts the smaller number among `u` and `v` from the larger one among them.
 Then, it removes any trailing zeros from the result.
-So in each iteration, the larger one of the two numbers will definitely get smaller, and the other one will remain the same.
+So in each iteration, as long as both numbers are nonzero, the larger one of the two numbers will definitely get smaller, and the other one will remain the same.
 Therefore, we will use the larger number among `u` and `v` as our termination measure:
 ```rust
 while u != v {
@@ -382,3 +378,35 @@ while u != v {
     v >>= v.trailing_zeros();
 }
 ```
+Since subtracting `0` does not decrease the number,
+it is cruicial that `v` and `u` do not become `0`. We annotate the loop with this invariant to make F* aware of this:
+```rust
+while u != v {
+    hax_lib::loop_decreases!(if v < u { u } else { v });
+    hax_lib::loop_invariant!(v != 0 && u != 0);
+
+    if u > v {
+        let temp = u;
+        u = v;
+        v = temp;
+    }
+
+    v -= u;
+    v >>= v.trailing_zeros();
+}
+```
+We also need to make F* aware that `v >>= v.trailing_zeros();` cannot
+increase `v` with an additional lemma:
+```
+val shift_right_trailing_zeros_le #t (a: int_t t):
+    Lemma (requires (v a <> 0))
+          (ensures (v (shift_right a (trailing_zeros a)) <= v a))
+          [SMTPat (shift_right a (trailing_zeros a))]
+```
+We extract and reverify:
+```
+[CHECK] Gcd.fst 
+Verified module: Gcd
+All verification conditions discharged successfully
+```
+Yay, we made it! The binary implementation always terminates and never panics.
