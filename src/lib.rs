@@ -32,29 +32,29 @@ pub trait Gcd {
 macro_rules! gcd_impl {
     ($(($T:ty) $binary:ident $euclid:ident),*) => {$(
         #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
+        #[hax_lib::include]
         pub const fn $binary(mut u: $T, mut v: $T) -> $T
         {
             if u == 0 { return v; }
             if v == 0 { return u; }
 
             let shift = (u | v).trailing_zeros();
-            v >>= v.trailing_zeros();
+            u >>= shift;
+            v >>= shift;
             u >>= u.trailing_zeros();
 
-            while v != u {
+            v >>= v.trailing_zeros();
+            while u != v {
                 hax_lib::loop_decreases!(if v < u { u } else { v });
                 hax_lib::loop_invariant!(v != 0 && u != 0);
 
-
-                #[allow(clippy::manual_swap)]
                 if u > v {
-                    // mem::swap(&mut u, &mut v);
                     let temp = u;
                     u = v;
                     v = temp;
                 }
-                // here v >= u
-                v -= u; 
+
+                v -= u;
                 v >>= v.trailing_zeros();
             }
 
@@ -62,6 +62,9 @@ macro_rules! gcd_impl {
         }
 
         #[doc = concat!("Const euclid GCD implementation for `", stringify!($T), "`.")]
+        #[hax_lib::include]
+        #[hax_lib::requires(a != 0 || b != 0)]
+        // #[hax_lib::ensures(|res| res != 0 && a % res == 0)] // a % res == 0 && b % res == 0
         pub const fn $euclid(a: $T, b: $T) -> $T
         {
             // variable names based off euclidean division equation: a = b · q + r
@@ -74,6 +77,7 @@ macro_rules! gcd_impl {
             #[allow(clippy::manual_swap)]
             while b != 0 {
                 hax_lib::loop_decreases!(b);
+                // hax_lib::loop_invariant!(a != 0);
                 // mem::swap(&mut a, &mut b);
                 let temp = a;
                 a = b;
@@ -85,11 +89,10 @@ macro_rules! gcd_impl {
             a
         }
 
-        #[hax_lib::exclude()]
         impl Gcd for $T {
             #[inline]
             fn gcd(self, other: $T) -> $T {
-                $binary(self, other)
+                self.gcd_binary(other)
             }
 
             #[inline]
@@ -117,7 +120,6 @@ gcd_impl! {
 macro_rules! gcd_impl_nonzero {
     ($(($T:ty) $binary_nonzero:ident/$binary:ident $euclid_nonzero:ident/$euclid:ident),*) => {$(
         #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
-        #[hax_lib::exclude()]
         pub const fn $binary_nonzero(u: $T, v: $T) -> $T
         {
             match <$T>::new($binary(u.get(), v.get())) {
@@ -127,7 +129,6 @@ macro_rules! gcd_impl_nonzero {
         }
 
         #[doc = concat!("Const euclid GCD implementation for `", stringify!($T), "`.")]
-        #[hax_lib::exclude()]
         pub const fn $euclid_nonzero(a: $T, b: $T) -> $T
         {
             match <$T>::new($euclid(a.get(), b.get())) {
@@ -136,7 +137,6 @@ macro_rules! gcd_impl_nonzero {
             }
         }
 
-        #[hax_lib::exclude()]
         impl Gcd for $T {
             #[inline]
             fn gcd(self, other: $T) -> $T {

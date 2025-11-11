@@ -11,7 +11,7 @@ categories = ["algorithms"]
 edition = "2021"
 
 [dependencies]
-hax-lib = { path = "../hax/hax-lib" }
+hax-lib = { git = "https://github.com/hacspec/hax" }
 
 [dev-dependencies]
 criterion = "0.3"
