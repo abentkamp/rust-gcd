@@ -198,3 +198,93 @@ Running verification again, we get the next error:
 * Error 72 at Gcd.fst(19,28-19,41):
   - Identifier while_loop_cf not found in module Rust_primitives.Hax
 ```
+This is another missing function in hax's F* libraries (https://github.com/cryspen/hax/issues/1204).
+We can avoid it by refactoring the Rust code such that it avoids `break`s in while-loops.
+Here is the problematic while-loop:
+```rust
+pub const fn $binary(mut u: $T, mut v: $T) -> $T
+{
+    if u == 0 { return v; }
+    if v == 0 { return u; }
+
+    let shift = (u | v).trailing_zeros();
+    u >>= shift;
+    v >>= shift;
+    u >>= u.trailing_zeros();
+
+    while true {
+        v >>= v.trailing_zeros();
+
+        if u > v {
+            let temp = u;
+            u = v;
+            v = temp;
+        }
+
+        v -= u;
+
+        if v == 0 { break; }
+    }
+
+    u << shift
+}
+```
+So how can we get rid of the `break`? We will have to modify the Rust code a little. 
+Considering the checks at the beginning of the function,
+it is easy to see that `u` and `v` cannot be zero at the beginning of the `while`-loop
+because the shifting operations before the while loop can only remove zeros.
+So we can replace the while loop by the following,
+without changing the function's behavior:
+```rust
+while v != 0 {
+    v >>= v.trailing_zeros();
+
+    if u > v {
+        let temp = u;
+        u = v;
+        v = temp;
+    }
+
+    v -= u;
+}
+```
+The only difference is that we now perform one additional check `v != 0` before the first iteration of the while-loop, and this check will always yield `true`.
+
+Now, instead of looking at the next error that the next verification attempt would yield,
+let us first think about, which termination measure we can assign to this while-loop.
+
+Here is a summary of what the while loop is doing: The first line of the loop removes any trailing zeros in the binary representation of `v`. We don't need to this for `u` because `u` will never have any trailing zeros at this point. And then, we subtract the smaller number among `u` and `v` from the larger one among them. So in each iteration, one of the two numbers will definitely get smaller, and the other one will get smaller or remain the same.
+
+Unfortunately, the `loop_decreases` annotation is limited to take only machine integers. So we cannot
+use the pair `(u, v)` as a termination measure and we cannot use `u + v` as a termination measure because `u + v` might cause integer overflow. Instead, we will use the larger number among `u` and `v` as our termination measure:
+```rust
+while v != 0 {
+    hax_lib::loop_decreases!(if v < u { u } else { v });
+    v >>= v.trailing_zeros();
+
+    if u > v {
+        let temp = u;
+        u = v;
+        v = temp;
+    }
+
+    v -= u;
+}
+```
+This is almost correct, but not quite. In the edge case where `u` and `v` are equal at the beginning of the loop, `v` is set to `0`, but `u` remains the same. So in this edge case, the expression `if v < u { u } else { v }` does not decrease.
+
+However, noting that this edge case will always be the last iteration of the loop because `v` is set to `0`, we can refactor the code to make the termination measure work:
+```rust
+while v != 0 {
+    hax_lib::loop_decreases!(if v < u { u } else { v });
+    v >>= v.trailing_zeros();
+
+    if u > v {
+        let temp = u;
+        u = v;
+        v = temp;
+    }
+
+    v -= u;
+}
+```
