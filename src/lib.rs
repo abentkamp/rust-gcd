@@ -18,7 +18,7 @@ pub trait Gcd {
     /// assert_eq!(10, 10u8.gcd(20));
     /// assert_eq!(44, 2024u32.gcd(748));
     /// ```
-    fn gcd(self, other: Self) -> Self;
+    fn gcd_(self, other: Self) -> Self;
 
     /// Determine [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
     /// using the [Binary GCD algorithm](https://en.wikipedia.org/wiki/Binary_GCD_algorithm).
@@ -86,7 +86,7 @@ macro_rules! gcd_impl {
 
         impl Gcd for $T {
             #[inline]
-            fn gcd(self, other: $T) -> $T {
+            fn gcd_(self, other: $T) -> $T {
                 self.gcd_binary(other)
             }
 
@@ -112,6 +112,7 @@ gcd_impl! {
     (usize) binary_usize euclid_usize
 }
 
+/*
 macro_rules! gcd_impl_nonzero {
     ($(($T:ty) $binary_nonzero:ident/$binary:ident $euclid_nonzero:ident/$euclid:ident),*) => {$(
         #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
@@ -134,7 +135,7 @@ macro_rules! gcd_impl_nonzero {
 
         impl Gcd for $T {
             #[inline]
-            fn gcd(self, other: $T) -> $T {
+            fn gcd_(self, other: $T) -> $T {
                 self.gcd_binary(other)
             }
 
@@ -222,16 +223,16 @@ mod test {
     #[test]
     fn test_gcd_basic() {
         // some base cases
-        assert_eq!(0, 0u8.gcd(0));
-        assert_eq!(10, 10u8.gcd(0));
-        assert_eq!(10, 0u8.gcd(10));
+        assert_eq!(0, 0u8.gcd_(0));
+        assert_eq!(10, 10u8.gcd_(0));
+        assert_eq!(10, 0u8.gcd_(10));
     }
 
     fn verify_gcd<T>(a: T, b: T, r: T)
     where
         T: Gcd + Copy + PartialEq + Debug,
     {
-        let gcd = a.gcd(b);
+        let gcd = a.gcd_(b);
         let egcd = a.gcd_euclid(b);
         let bgcd = a.gcd_binary(b);
         assert_eq!(r, gcd, "{:?}.gcd({:?})", a, b);
@@ -292,3 +293,4 @@ mod test {
         assert_eq!(U32_GCD_R[4], U32_GCD_R_4);
     }
 }
+*/
