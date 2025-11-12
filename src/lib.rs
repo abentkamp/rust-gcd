@@ -1,5 +1,6 @@
 #![no_std]
 use core::num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize};
+use paste::paste;
 
 pub trait Gcd {
     /// Determine [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
@@ -98,6 +99,54 @@ macro_rules! gcd_impl {
             #[inline]
             fn gcd_euclid(self, other: $T) -> $T {
                 $euclid(self, other)
+            }
+        }
+
+        paste! {
+            #[cfg(kani)]
+            #[kani::proof]
+            #[kani::unwind(30)]
+            fn [<check_ $euclid>]() {
+                let limit: u128 = 100000;
+                let x: $T = kani::any();
+                let y: $T = kani::any();
+                kani::assume((x as u128) < limit);
+                kani::assume((y as u128) < limit);
+
+                let res = $euclid(x, y);
+
+                assert!(x == 0 || res <= x);
+                assert!(y == 0 || res <= y);
+
+                // Takes too long:
+                // if (res != 0) {
+                //     assert!(x % res == 0);
+                //     assert!(y % res == 0);
+                // }
+            }
+        }
+
+        paste! {
+            #[cfg(kani)]
+            #[kani::proof]
+            #[kani::unwind(30)]
+            fn [<check_ $binary>]() {
+                let limit: u128 = 100000;
+                let x: $T = kani::any();
+                let y: $T = kani::any();
+                kani::assume((x as u128) < limit);
+                kani::assume((y as u128) < limit);
+
+                let res = $binary(x, y);
+
+                assert!(x == 0 || res <= x);
+                assert!(y == 0 || res <= y);
+
+                // Takes too long:
+                // if (res != 0) {
+                //     assert!(x % res == 0);
+                //     assert!(y % res == 0);
+                // }
             }
         }
     )*};
