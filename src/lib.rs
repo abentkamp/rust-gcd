@@ -1,6 +1,7 @@
-#![no_std]
-use core::num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize};
-use paste::paste;
+// #![no_std]
+#![feature(stmt_expr_attributes)]
+#![feature(proc_macro_hygiene)]
+use std::num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize};
 
 pub trait Gcd {
     /// Determine [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
@@ -31,10 +32,13 @@ pub trait Gcd {
 }
 
 macro_rules! gcd_impl {
-    ($(($T:ty) $binary:ident $euclid:ident),*) => {$(
+    ($(($T:ty) $binary:ident $euclid:ident $kani:ident),*) => {$(
         #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
         pub const fn $binary(mut u: $T, mut v: $T) -> $T
         {
+            let u0 = u;
+            let v0 = v;
+
             if u == 0 { return v; }
             if v == 0 { return u; }
 
@@ -43,6 +47,7 @@ macro_rules! gcd_impl {
             v >>= shift;
             u >>= u.trailing_zeros();
 
+            #[kani::loop_invariant(u != 0 && v != 0)]
             loop {
                 v >>= v.trailing_zeros();
 
@@ -62,7 +67,6 @@ macro_rules! gcd_impl {
             u << shift
         }
 
-        #[doc = concat!("Const euclid GCD implementation for `", stringify!($T), "`.")]
         pub const fn $euclid(a: $T, b: $T) -> $T
         {
             // variable names based off euclidean division equation: a = b · q + r
@@ -71,8 +75,8 @@ macro_rules! gcd_impl {
             } else {
                 (b, a)
             };
-
-            #[allow(clippy::manual_swap)]
+            
+            #[kani::loop_invariant(true)]
             while b != 0 {
                 // mem::swap(&mut a, &mut b);
                 let temp = a;
@@ -102,63 +106,47 @@ macro_rules! gcd_impl {
             }
         }
 
-        paste! {
-            #[cfg(kani)]
-            #[kani::proof]
-            #[kani::unwind(30)]
-            fn [<check_ $euclid>]() {
-                let limit: u128 = 100000;
-                let x: $T = kani::any();
-                let y: $T = kani::any();
-                kani::assume((x as u128) < limit);
-                kani::assume((y as u128) < limit);
 
-                let res = $euclid(x, y);
+        // Kani doesn't check if a loop will always terminate in proofs with loop contracts. So it could be that some
+        // properties are proved successfully with Kani butactually are unreachable due to the non-termination of some loops.
 
-                assert!(x == 0 || res <= x);
-                assert!(y == 0 || res <= y);
+        #[cfg(kani)]
+        #[kani::proof]
+        // #[kani::unwind(30)]
+        fn $kani() {
+            // let limit: u128 = 100000;
+            let x: $T = kani::any();
+            let y: $T = kani::any();
+            // kani::assume((x as u128) < limit);
+            // kani::assume((y as u128) < limit);
 
-                // Takes too long:
-                // if (res != 0) {
-                //     assert!(x % res == 0);
-                //     assert!(y % res == 0);
-                // }
+            let res = $euclid(x, y);
+            
+            // assert!(x == 0 || res <= x);
+            // assert!(y == 0 || res <= y);
+
+            let res = $binary(x, y);
+
+            // assert!(x == 0 || res <= x);
+            // assert!(y == 0 || res <= y);
+
+            // Takes too long:
+            // if (res != 0) {
+            //     assert!(x % res == 0);
+            //     assert!(y % res == 0);
+            // }
             }
-        }
 
-        paste! {
-            #[cfg(kani)]
-            #[kani::proof]
-            #[kani::unwind(30)]
-            fn [<check_ $binary>]() {
-                let limit: u128 = 100000;
-                let x: $T = kani::any();
-                let y: $T = kani::any();
-                kani::assume((x as u128) < limit);
-                kani::assume((y as u128) < limit);
-
-                let res = $binary(x, y);
-
-                assert!(x == 0 || res <= x);
-                assert!(y == 0 || res <= y);
-
-                // Takes too long:
-                // if (res != 0) {
-                //     assert!(x % res == 0);
-                //     assert!(y % res == 0);
-                // }
-            }
-        }
     )*};
 }
 
 gcd_impl! {
-    (u8) binary_u8 euclid_u8,
-    (u16) binary_u16 euclid_u16,
-    (u32) binary_u32 euclid_u32,
-    (u64) binary_u64 euclid_u64,
-    (u128) binary_u128 euclid_u128,
-    (usize) binary_usize euclid_usize
+    (u8) binary_u8 euclid_u8 kani_u8,
+    (u16) binary_u16 euclid_u16 kani_u16,
+    (u32) binary_u32 euclid_u32 kani_u32,
+    (u64) binary_u64 euclid_u64 kani_u64,
+    (u128) binary_u128 euclid_u128 kani_u128,
+    (usize) binary_usize euclid_usize kani_usize
 }
 
 macro_rules! gcd_impl_nonzero {
