@@ -2,85 +2,6 @@
 use core::num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize};
 use vstd::prelude::*;
 
-verus! {
-
-
-pub const fn euclid(a: u8, b: u8) -> u8
-{
-    // variable names based off euclidean division equation: a = b · q + r
-    let (mut a, mut b) = if a > b {
-        (a, b)
-    } else {
-        (b, a)
-    };
-
-    #[allow(clippy::manual_swap)]
-    while b != 0 
-      decreases b {
-        // mem::swap(&mut a, &mut b);
-        let temp = a;
-        a = b;
-        b = temp;
-
-        b %= a;
-    }
-
-    a
-}
-
-#[verifier::external_body]
-proof fn trailing_zeros_axiom() 
-  ensures forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0
-{}
-
-pub const fn binary(mut u: u8, mut v: u8) -> u8
-{
-
-    assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
-
-    if u == 0 { return v; }
-    if v == 0 { return u; }
-
-    assert(u != 0 && v != 0 ==> u | v != 0) by (bit_vector);
-    let shift = (u | v).trailing_zeros();
-    // u >>= shift;
-    // v >>= shift;
-    assert(u != 0 && v != 0);
-
-    u >>= u.trailing_zeros();
-    v >>= v.trailing_zeros();
-
-    assert(u != 0 && v != 0);
-
-    loop
-      invariant_except_break u != 0 && v != 0
-      decreases u + v
-      {
-
-        #[allow(clippy::manual_swap)]
-        if u > v {
-            // mem::swap(&mut u, &mut v);
-            let temp = u;
-            u = v;
-            v = temp;
-        }
-
-        v -= u; // here v >= u
-
-        if v == 0 { break; }
-        assert(u != 0 && v != 0);
-        assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
-
-        assert(forall |i: u8| v >> i <= v) by (bit_vector);
-
-        v >>= v.trailing_zeros();
-
-        assert(u != 0 && v != 0);
-    }
-
-    u << shift
-}
-
 pub trait Gcd {
     /// Determine [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
     /// using [`gcd_binary`].
@@ -109,59 +30,91 @@ pub trait Gcd {
     fn gcd_euclid(self, other: Self) -> Self;
 }
 
+
+verus! {
+    #[verifier::external_body]
+    proof fn trailing_zeros_axiom() 
+        ensures forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0
+    {}
+}
+            
 macro_rules! gcd_impl {
     ($(($T:ty) $binary:ident $euclid:ident),*) => {$(
-        #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
-        pub const fn $binary(mut u: $T, mut v: $T) -> $T
-        {
-            if u == 0 { return v; }
-            if v == 0 { return u; }
 
-            let shift = (u | v).trailing_zeros();
-            u >>= shift;
-            v >>= shift;
-            u >>= u.trailing_zeros();
+        verus! {
 
-            loop {
+            #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
+            pub const fn $binary(mut u: $T, mut v: $T) -> $T
+            {
+
+                assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
+
+                if u == 0 { return v; }
+                if v == 0 { return u; }
+
+                assert(u != 0 && v != 0 ==> u | v != 0) by (bit_vector);
+                let shift = (u | v).trailing_zeros();
+                // u >>= shift;
+                // v >>= shift;
+                assert(u != 0 && v != 0);
+
+                u >>= u.trailing_zeros();
                 v >>= v.trailing_zeros();
 
-                #[allow(clippy::manual_swap)]
-                if u > v {
-                    // mem::swap(&mut u, &mut v);
-                    let temp = u;
-                    u = v;
-                    v = temp;
+                assert(u != 0 && v != 0);
+
+                loop
+                invariant_except_break u != 0 && v != 0
+                decreases u + v
+                {
+
+                    #[allow(clippy::manual_swap)]
+                    if u > v {
+                        // mem::swap(&mut u, &mut v);
+                        let temp = u;
+                        u = v;
+                        v = temp;
+                    }
+
+                    v -= u; // here v >= u
+
+                    if v == 0 { break; }
+                    assert(u != 0 && v != 0);
+                    assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
+
+                    assert(forall |i: u8| v >> i <= v) by (bit_vector);
+
+                    v >>= v.trailing_zeros();
+
+                    assert(u != 0 && v != 0);
                 }
 
-                v -= u; // here v >= u
-
-                if v == 0 { break; }
+                u << shift
             }
+            
+            #[doc = concat!("Const euclid GCD implementation for `", stringify!($T), "`.")]
+            pub const fn $euclid(a: $T, b: $T) -> $T
+            {
+                // variable names based off euclidean division equation: a = b · q + r
+                let (mut a, mut b) = if a > b {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
 
-            u << shift
-        }
+                #[allow(clippy::manual_swap)]
+                while b != 0 
+                decreases b {
+                    // mem::swap(&mut a, &mut b);
+                    let temp = a;
+                    a = b;
+                    b = temp;
 
-        #[doc = concat!("Const euclid GCD implementation for `", stringify!($T), "`.")]
-        pub const fn $euclid(a: $T, b: $T) -> $T
-        {
-            // variable names based off euclidean division equation: a = b · q + r
-            let (mut a, mut b) = if a > b {
-                (a, b)
-            } else {
-                (b, a)
-            };
+                    b %= a;
+                }
 
-            #[allow(clippy::manual_swap)]
-            while b != 0 {
-                // mem::swap(&mut a, &mut b);
-                let temp = a;
-                a = b;
-                b = temp;
-
-                b %= a;
+                a
             }
-
-            a
         }
 
         impl Gcd for $T {
@@ -184,14 +137,15 @@ macro_rules! gcd_impl {
 }
 
 gcd_impl! {
-    (u8) binary_u8 euclid_u8,
-    (u16) binary_u16 euclid_u16,
-    (u32) binary_u32 euclid_u32,
-    (u64) binary_u64 euclid_u64,
-    (u128) binary_u128 euclid_u128,
-    (usize) binary_usize euclid_usize
+    (u8) binary_u8 euclid_u8//,
+    // (u16) binary_u16 euclid_u16,
+    // (u32) binary_u32 euclid_u32,
+    // (u64) binary_u64 euclid_u64,
+    // (u128) binary_u128 euclid_u128,
+    // (usize) binary_usize euclid_usize
 }
 
+/*
 macro_rules! gcd_impl_nonzero {
     ($(($T:ty) $binary_nonzero:ident/$binary:ident $euclid_nonzero:ident/$euclid:ident),*) => {$(
         #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
@@ -372,5 +326,4 @@ mod test {
         assert_eq!(U32_GCD_R[4], U32_GCD_R_4);
     }
 }
-
-}
+*/
