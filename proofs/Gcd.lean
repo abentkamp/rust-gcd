@@ -1,4 +1,4 @@
-import GcdVerif.Gcd
+import Gcd.Funs
 open Aeneas.Std Result Error
 namespace gcd
 

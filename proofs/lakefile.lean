@@ -1,8 +1,8 @@
 import Lake
 open Lake DSL
 
-package GcdVerif
+package Gcd
 
 require aeneas from "../../aeneas/backends/lean"
 
-@[default_target] lean_lib GcdVerif
+@[default_target] lean_lib Gcd
