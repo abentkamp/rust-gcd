@@ -14,4 +14,6 @@ theorem euclid_loop0_u8_spec (a b : U8)
   case isFalse h =>
     simp
 termination_by b
-decreasing_by sorry
+decreasing_by
+  unfold sizeOf UScalar._sizeOf_inst UScalar._sizeOf_1
+  aesop (add safe Nat.mod_lt) (add safe Nat.pos_of_ne_zero)
