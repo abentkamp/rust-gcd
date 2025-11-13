@@ -1,5 +1,85 @@
 #![no_std]
 use core::num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize};
+use vstd::prelude::*;
+
+verus! {
+
+
+pub const fn euclid(a: u8, b: u8) -> u8
+{
+    // variable names based off euclidean division equation: a = b · q + r
+    let (mut a, mut b) = if a > b {
+        (a, b)
+    } else {
+        (b, a)
+    };
+
+    #[allow(clippy::manual_swap)]
+    while b != 0 
+      decreases b {
+        // mem::swap(&mut a, &mut b);
+        let temp = a;
+        a = b;
+        b = temp;
+
+        b %= a;
+    }
+
+    a
+}
+
+#[verifier::external_body]
+proof fn trailing_zeros_axiom() 
+  ensures forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0
+{}
+
+pub const fn binary(mut u: u8, mut v: u8) -> u8
+{
+
+    assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
+
+    if u == 0 { return v; }
+    if v == 0 { return u; }
+
+    assert(u != 0 && v != 0 ==> u | v != 0) by (bit_vector);
+    let shift = (u | v).trailing_zeros();
+    // u >>= shift;
+    // v >>= shift;
+    assert(u != 0 && v != 0);
+
+    u >>= u.trailing_zeros();
+    v >>= v.trailing_zeros();
+
+    assert(u != 0 && v != 0);
+
+    loop
+      invariant_except_break u != 0 && v != 0
+      decreases u + v
+      {
+
+        #[allow(clippy::manual_swap)]
+        if u > v {
+            // mem::swap(&mut u, &mut v);
+            let temp = u;
+            u = v;
+            v = temp;
+        }
+
+        v -= u; // here v >= u
+
+        if v == 0 { break; }
+        assert(u != 0 && v != 0);
+        assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
+
+        assert(forall |i: u8| v >> i <= v) by (bit_vector);
+
+        v >>= v.trailing_zeros();
+
+        assert(u != 0 && v != 0);
+    }
+
+    u << shift
+}
 
 pub trait Gcd {
     /// Determine [greatest common divisor](https://en.wikipedia.org/wiki/Greatest_common_divisor)
@@ -291,4 +371,6 @@ mod test {
         assert_eq!(U32_GCD_R[3], U32_GCD_R_3);
         assert_eq!(U32_GCD_R[4], U32_GCD_R_4);
     }
+}
+
 }
