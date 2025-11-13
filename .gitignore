@@ -1,3 +1,7 @@
 target
 Cargo.lock
 .lake
+gcd.llbc
+/lean/Funs.lean
+/lean/FunsExternal_Template.lean
+/lean/Types.lean
