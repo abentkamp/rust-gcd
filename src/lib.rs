@@ -33,8 +33,8 @@ pub trait Gcd {
 
 verus! {
     #[verifier::external_body]
-    proof fn trailing_zeros_axiom() 
-        ensures forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0
+    proof fn trailing_zeros_axiom(x: u8) 
+        ensures x != 0 ==> x >> #[trigger] x.trailing_zeros() != 0
     {}
 }
             
@@ -46,22 +46,17 @@ macro_rules! gcd_impl {
             #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
             pub const fn $binary(mut u: $T, mut v: $T) -> $T
             {
-
-                assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
-
                 if u == 0 { return v; }
                 if v == 0 { return u; }
 
                 assert(u != 0 && v != 0 ==> u | v != 0) by (bit_vector);
+
                 let shift = (u | v).trailing_zeros();
-                // u >>= shift;
-                // v >>= shift;
-                assert(u != 0 && v != 0);
+
+                proof! { trailing_zeros_axiom(u); trailing_zeros_axiom(v); }
 
                 u >>= u.trailing_zeros();
                 v >>= v.trailing_zeros();
-
-                assert(u != 0 && v != 0);
 
                 loop
                 invariant_except_break u != 0 && v != 0
@@ -79,14 +74,11 @@ macro_rules! gcd_impl {
                     v -= u; // here v >= u
 
                     if v == 0 { break; }
-                    assert(u != 0 && v != 0);
-                    assert (forall |x: u8| #![auto] x != 0 ==> x >> x.trailing_zeros() != 0) by {trailing_zeros_axiom();};
 
+                    proof! { trailing_zeros_axiom(v); }
                     assert(forall |i: u8| v >> i <= v) by (bit_vector);
 
                     v >>= v.trailing_zeros();
-
-                    assert(u != 0 && v != 0);
                 }
 
                 u << shift
