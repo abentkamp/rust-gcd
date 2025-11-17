@@ -31,17 +31,16 @@ pub trait Gcd {
 }
 
 
-verus! {
-    #[verifier::external_body]
-    proof fn trailing_zeros_axiom(x: u8) 
-        ensures x != 0 ==> x >> #[trigger] x.trailing_zeros() != 0
-    {}
-}
-            
 macro_rules! gcd_impl {
-    ($(($T:ty) $binary:ident $euclid:ident),*) => {$(
+    ($(($T:ty) $binary:ident $euclid:ident $trailing_zeros_axiom:ident),*) => {$(
 
         verus! {
+            
+            // Note: With more effort, this could actually be proved, but we axiomatize it here:
+            #[verifier::external_body]
+            proof fn $trailing_zeros_axiom(x: $T) 
+                ensures x != 0 ==> x >> #[trigger] x.trailing_zeros() != 0
+            {}
 
             #[doc = concat!("Const binary GCD implementation for `", stringify!($T), "`.")]
             pub const fn $binary(mut u: $T, mut v: $T) -> $T
@@ -53,7 +52,7 @@ macro_rules! gcd_impl {
 
                 let shift = (u | v).trailing_zeros();
 
-                proof! { trailing_zeros_axiom(u); trailing_zeros_axiom(v); }
+                proof! { $trailing_zeros_axiom(u); $trailing_zeros_axiom(v); }
 
                 u >>= u.trailing_zeros();
                 v >>= v.trailing_zeros();
@@ -75,7 +74,7 @@ macro_rules! gcd_impl {
 
                     if v == 0 { break; }
 
-                    proof! { trailing_zeros_axiom(v); }
+                    proof! { $trailing_zeros_axiom(v); }
                     assert(forall |i: u8| v >> i <= v) by (bit_vector);
 
                     v >>= v.trailing_zeros();
@@ -129,12 +128,12 @@ macro_rules! gcd_impl {
 }
 
 gcd_impl! {
-    (u8) binary_u8 euclid_u8//,
-    // (u16) binary_u16 euclid_u16,
-    // (u32) binary_u32 euclid_u32,
-    // (u64) binary_u64 euclid_u64,
-    // (u128) binary_u128 euclid_u128,
-    // (usize) binary_usize euclid_usize
+    (u8) binary_u8 euclid_u8 trailing_zeros_axiom_u8,
+    (u16) binary_u16 euclid_u16 trailing_zeros_axiom_u16,
+    (u32) binary_u32 euclid_u32 trailing_zeros_axiom_u32,
+    (u64) binary_u64 euclid_u64 trailing_zeros_axiom_u64//,
+    // (u128) binary_u128 euclid_u128 trailing_zeros_axiom_u128,
+    // (usize) binary_usize euclid_usize trailing_zeros_axiom_usize
 }
 
 /*
