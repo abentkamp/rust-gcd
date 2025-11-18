@@ -424,8 +424,302 @@ Yay, we made it! Also the binary implementation always terminates and never pani
 
 ## Verification using other tools
 
+For comparison, we verify panic freedom and termination
+using other tools as well.
+
 ### Kani
 
+First, [install Kani](https://model-checking.github.io/kani/install-guide.html). We will use version 0.66.0.
+
+To verify the function `$euclid` using Kani,
+we need to add another function that implements the verification. Since `$euclid` is part of a macro `gcd_impl`
+that duplicates it for various bit-lengths,
+we add a third identifier `$check_euclid:ident` to that macro,
+and provide the following identifiers:
+```rust
+gcd_impl! {
+    (u8) binary_u8 euclid_u8 check_euclid_u8,
+    (u16) binary_u16 euclid_u16 check_euclid_u16,
+    (u32) binary_u32 euclid_u32 check_euclid_u32,
+    (u64) binary_u64 euclid_u64 check_euclid_u64,
+    (u128) binary_u128 euclid_u128 check_euclid_u128,
+    (usize) binary_usize euclid_usize check_euclid_usize
+}
+```
+Now we can implement the verification function `check_gcd` inside the macro. Here is a first draft:
+```rust
+#[kani::proof]
+#[cfg(kani)]
+fn $check_gcd() {
+    let x: $T = kani::any();
+    let y: $T = kani::any();
+
+    $euclid(x, y);
+}
+```
+The first annotation tells Kani to run this verification function, and the second annotation tells the normal Rust compiler to ignore this function. The expression `kani::any()` tells Kani to test all possible integer values for `x` and `y`.
+
+Now we run Kani:
+```
+kani ./src/lib.rs 
+```
+Unfortunatlely, Kani does not terminate because the loop in `$euclid` is potentially unbounded.
+
+#### Unwinding bound
+
+We need to specify an upper bound on how often we want Kani to unwind the loop, using the `kani::unwind` annotation. When setting such an upper bound, we also need to limit the variables `x` and `y` to values that will make the number of loop iterations stay below the given bound, using `kani::assume`. Here are some numbers that work okay:
+```rust
+#[kani::proof]
+#[cfg(kani)]
+#[kani::unwind(15)]
+fn $check_euclid() {
+    let limit: u128 = 200;
+    let x: $T = kani::any();
+    let y: $T = kani::any();
+    kani::assume((x as u128) < limit);
+    kani::assume((y as u128) < limit);
+
+    let res = $euclid(x, y);
+}
+```
+Now we run `kani ./src/lib.rs` again:
+```
+Complete - 12 successfully verified harnesses, 0 failures, 12 total.
+```
+The binary version can be verified in the exact same way by adding an analogous verification function `$check_binary` to the macro.
+
+#### Loop contracts
+However, there is yet another option to verify loops in Kani, without the need to limit the verified input values: loop contracts.
+
+To use them, we first need to add the following
+annotations at the top of our file:
+```rust
+#![feature(stmt_expr_attributes)]
+#![feature(proc_macro_hygiene)]
+```
+
+Now we can use the annotation `kani::loop_invariant` to annotate our loop with an invariant. Since we only want to show panic-freedom here, simple using `true` works as an invariant for the loop in `$euclid`:
+```rust
+#[kani::loop_invariant(true)]
+while b != 0 {
+    let temp = a;
+    a = b;
+    b = temp;
+
+    b %= a;
+}
+```
+With this annotation, Kani will abstract over the loop instead of unwinding it. So we no longer need to
+limit the size of our inputs in `$check_euclid`. We can comment out the corresponding lines:
+```rust
+// kani::assume(x < limit);
+// kani::assume(y < limit);
+```
+To activate the loop contract feature we need to add
+the following option when invoking Kani:
+```
+kani ./src/lib.rs -Z loop-contracts
+```
+Now verification is much faster, and it verifies all possible inputs:
+```
+Complete - 12 successfully verified harnesses, 0 failures, 12 total.
+```
+However, in contrast to the approach without loop contracts, this does not verify termination.
+
+Similarly, we can also verify the function `$binary` using loop contracts. However, using `true` as an invariant does not work here because the line
+```rust
+v >>= v.trailing_zeros();
+```
+can panic when `v` is `0`.
+So we add `v != 0` as an invariant:
+```rust
+#[kani::loop_invariant(v != 0)]
+loop {
+    v >>= v.trailing_zeros();
+
+    #[allow(clippy::manual_swap)]
+    if u > v {
+        // mem::swap(&mut u, &mut v);
+        let temp = u;
+        u = v;
+        v = temp;
+    }
+
+    v -= u; // here v >= u
+
+    if v == 0 { break; }
+}
+```
+
 ### Aeneas
+
+[Install Aeneas](https://github.com/AeneasVerif/aeneas?tab=readme-ov-file#installation--build).
+We use commit `f90a279b` here.
+
+[Install Lean](https://lean-lang.org/install/). 
+
+We will use the following `Makefile` to make Aeneas extract Lean code from our crate:
+```
+CHARON_HOME	?= $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/../charon
+AENEAS_HOME	?= $(dir $(abspath $(lastword $(MAKEFILE_LIST))))/../aeneas
+
+CHARON_EXE = $(CHARON_HOME)/bin/charon
+AENEAS_EXE = $(AENEAS_HOME)/bin/aeneas
+
+AENEAS_OPTIONS ?=
+
+.PHONY: extract
+extract: gcd.llbc
+	$(AENEAS_EXE) -backend lean gcd.llbc -split-files -dest proofs/Gcd $(AENEAS_OPTIONS)
+
+gcd.llbc: $(wildcard */*.rs)
+	RUSTFLAGS="--cfg eurydice" $(CHARON_EXE) cargo --preset=aeneas --start-from crate::euclid_u8 --start-from crate::binary_u8
+```
+Save this under the name `Makefile` and run `make`. Note that we specify the options `--start-from crate::euclid_u8 --start-from crate::binary_u8`, which will extract specifically the functions `euclid_u8` and `binary_u8` into Lean. Running `make` produces a couple of Lean files in the directory `proofs/Gcd`.
+
+We create a new Lean project around these files:
+```
+cd proofs
+lake +v4.24.0 init Gcd lib
+```
+
+Add the following lines to `lakefile.toml` to
+add the Aeneas Lean library as a dependency:
+```toml
+[[require]]
+name = "aeneas"
+path = "../../aeneas/backends/lean"
+```
+Then run
+```
+lake update
+```
+to update the dependencies. This will download `mathlib`,
+a dependeny of Aeneas, which may take a while.
+
+Aeneas created a file called `FunsExternal_Template.lean`
+because the `trailing_zeros` function is not part of the Aeneas library. Rename this template file to `FunsExternal.lean`. We could write a precise definition of this function here, but for now, we just define it as `sorry`, which is a placeholder for a missing definition.
+Replace the line
+```lean
+axiom core.num.U8.trailing_zeros : U8 → Result U32
+```
+by
+```lean
+def core.num.U8.trailing_zeros : U8 → Result U32 := sorry
+```
+Now in the root file of our Lean project, `Gcd.lean`, add the import
+```
+import Gcd.Funs
+```
+Now we run
+```
+lake build
+```
+to ensure that our Lean code typechecks:
+```
+warning: Gcd/FunsExternal.lean:15:4: declaration uses 'sorry'
+Build completed successfully (1500 jobs).
+```
+
+Let's have a look at how the Lean translations of our Rust functions look like.
+Open the file `Funs.lean` in VSCode (with the Lean extension installed). You may see a lot of red in the editor, which will go away by pressing `Restart file`.
+The file contains four definitions: The functions `binary_u8` and `euclid_u8` themselves, and for each of them a function representing the contained loop, which has become a recursive function in Lean.
+
+The `euclid_u8` funciton for example looks as follows:
+```lean
+/- [gcd::euclid_u8]: loop 0:
+   Source: 'src/lib.rs', lines 75:12-82:13 -/
+def euclid_u8_loop (a : U8) (b : U8) : Result U8 :=
+  if b != 0#u8
+  then do
+       let b1 ← a % b
+       euclid_u8_loop b b1
+  else ok a
+partial_fixpoint
+
+/- [gcd::euclid_u8]:
+   Source: 'src/lib.rs', lines 65:8-85:9 -/
+def euclid_u8 (a : U8) (b : U8) : Result U8 :=
+  do
+  let (a1, b1) ← if a > b
+                   then ok (a, b)
+                   else ok (b, a)
+  euclid_u8_loop a1 b1
+```
+Now we can start proving. Open the file `Gcd.lean`.
+Let us verify termination and panic-freedom of `euclid_u8`.
+This can be expressed in Lean as follows:
+```
+theorem euclid_u8_spec (a b : U8) :
+    ∃ y, euclid_u8 a b = ok y := by sorry
+```
+Here, the `sorry` stands for a missing proof.
+A typical Aeneas proof looks like this:
+```
+theorem euclid_u8_spec (a b : U8) :
+    ∃ y, euclid_u8 a b = ok y := by
+  unfold euclid_u8
+  progress*
+```
+Unfortunately, this proof does not quite work yet.
+We get the error:
+```
+unsolved goals
+case isTrue
+a b : U8
+h✝ : a > b
+⊢ ∃ y, euclid_u8_loop a b = ok y
+
+case isFalse
+a b : U8
+h✝ : ¬a > b
+⊢ ∃ y, euclid_u8_loop b a = ok y
+```
+The problem is that the `progress*` tactic does
+not know the specification of the `euclid_u8_loop` function.
+Let's create a seperate theorem about that function.
+Put the following code above the theorem that we just wrote:
+```lean
+@[progress]
+theorem euclid_loop_u8_spec (a b : U8) :
+    ∃ y, euclid_u8_loop a b = ok y := by sorry
+```
+This theorem states that `euclid_u8_loop` terminates and does not panic, for now without proof (`sorry`).
+Note that after adding this theorem, the error on the theorem below has disappeared.
+The annotation `@[progress]` informs the `progress*` tactic about this specification and it can be used in the proof of `euclid_u8_spec`.
+
+Now we need to replace the `sorry` with an actual proof.
+Let's try the same idea:
+```lean
+@[progress]
+theorem euclid_loop_u8_spec (a b : U8) :
+    ∃ y, euclid_u8_loop a b = ok y := by 
+  unfold euclid_u8_loop
+  progress*
+```
+
+We get an error:
+```
+fail to show termination for
+  gcd.euclid_loop_u8_spec
+```
+
+From our discussion above, we know that `b` is a variable that decreases in this recursive function. We can tell Lean about this as follows:
+```lean
+@[progress]
+theorem euclid_loop_u8_spec (a b : U8) :
+    ∃ y, euclid_u8_loop a b = ok y := by 
+  unfold euclid_u8_loop
+  progress*
+termination_by b.val
+decreasing_by scalar_tac
+```
+Unfortunately, `scalar_tac` fails. We need to add the following command above the theorem to make `scalar_tac` go through:
+```
+attribute [scalar_tac_simps] bne_iff_ne
+```
+This command tells `scalar_tac` to use the lemma `bne_iff_ne`, which is needed here to complete the termination proof.
+
+Now all errors have disappeared and there are little check marks in the margin. That means `euclid_u8` really terminates and is panic-free!
 
 ### Verus
