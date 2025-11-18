@@ -1,23 +1,34 @@
 
 # Verifying a real world Rust crate
 
-In this tutorial,
+In this post,
 we are going to use hax and F* to verify a small real world Rust crate.
 The Rust crate https://crates.io/crates/gcd by Corey Farwell that we are going to verify implements
 functions to compute the greatest common divisor of two integers.
+We will focus on proving termination and panic freedom for now.
+
+We have forked the repository here:
+https://github.com/cryspen/rust-gcd.
+The results of this tutorial can be found in the branch `hax_fstar` of this fork: https://github.com/cryspen/rust-gcd/tree/hax_fstar.
 
 ## Preparation
 
-TODO: Install hax etc.
+First, install Hax and F*:
 
-To get started, we clone the repo of the Rust crate:
+* [Install Hax](https://github.com/cryspen/hax?tab=readme-ov-file#installation) (We are using commit `0334b38`, so after `git clone git@github.com:cryspen/hax.git && cd hax`, run `git checkout 0334b38`)
+
+* [Install F*](https://github.com/FStarLang/FStar/blob/master/INSTALL.md)
+
+To get started, we clone the repo of the Rust crate and switch to the
+commit that we use in this post (`8fb3a59`):
 ```
-git clone git@github.com:frewsxcv/rust-gcd.git
+git clone git@github.com:frewsxcv/rust-gcd.git && cd rust-gcd
+git checkout 8fb3a59
 ```
 
 We add hax-lib as a dependency, which will allow us to make annotations in the Rust code:
 ```
-cargo add --git https://github.com/hacspec/hax hax-lib
+cargo add --git https://github.com/hacspec/hax hax-lib --rev 0334b38
 ```
 
 ## Extraction
@@ -27,7 +38,7 @@ the `u8` variant of the euclidean algorithm first. The following command instruc
 ```
 cargo hax into -i '-** +gcd::euclid_u8' fstar
 ```
-This creates a new file `proofs/fstar/extraction/Gcd.fst`, which contains a translation of our Rust crate in F*. To help F* find the correct dependencies, we download [this Makefile](https://gist.github.com/W95Psp/4c304132a1f85c5af4e4959dd6b356c3)
+This creates a new file `proofs/fstar/extraction/Gcd.fst`, which contains a translation of our Rust crate in F*. To help F* find the correct dependencies, we download [this Makefile](https://gist.githubusercontent.com/W95Psp/4c304132a1f85c5af4e4959dd6b356c3/raw/a54aec2538c625eb525281106ff73ea96f7b96dc/Makefile)
 and put it into `proofs/fstar/extraction/`.
 
 Before we instruct F* to start proving anything, we first check that all dependencies can be found:
@@ -45,7 +56,7 @@ The Makefile we are using helps us to cache the results of the F* verification, 
 rm -rf .fstar-cache
 ```
 
-## Panic freedom
+## Panic freedom of Euclidean GCD
 
 By default, without us specifying anything, hax's F* backend will attempt to prove that the Rust program terminates and does not panic:
 ```
@@ -110,7 +121,7 @@ We would like to verify the other variants of this function for different bit le
 ```
 cargo hax into -i '-** +gcd::euclid_u8 +gcd::euclid_u16 +gcd::euclid_u32 +gcd::euclid_u64 +gcd::euclid_u128 +gcd::euclid_usize' fstar
 ```
-is a bit inconvenient. Instead, we can also mark the functions that we want to extract in the Rust code:
+is a bit inconvenient. Instead, we can also mark the functions that we want to extract in the Rust code using the `#[hax_lib::include]` annotation:
 ```rust
 #[hax_lib::include]
 pub const fn $euclid(a: $T, b: $T) -> $T
@@ -127,7 +138,7 @@ Now we can verify all variants, which should work without any further changes:
 make -C proofs/fstar/extraction/
 ```
 
-## Binary GCD
+## Panic freedom of binary GCD
 
 Next, we will attempt to prove panic freedom also for the binary variants. We add an `include`-annotation to the `$binary` function:
 ```rust
@@ -409,4 +420,12 @@ We extract and reverify:
 Verified module: Gcd
 All verification conditions discharged successfully
 ```
-Yay, we made it! The binary implementation always terminates and never panics.
+Yay, we made it! Also the binary implementation always terminates and never panics.
+
+## Verification using other tools
+
+### Kani
+
+### Aeneas
+
+### Verus
