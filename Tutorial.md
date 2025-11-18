@@ -9,7 +9,11 @@ We will focus on proving termination and panic freedom for now.
 
 We have forked the repository here:
 https://github.com/cryspen/rust-gcd.
-The results of this tutorial can be found in the branch `hax_fstar` of this fork: https://github.com/cryspen/rust-gcd/tree/hax_fstar.
+The results of this tutorial can be found in different branches of this fork:
+* https://github.com/cryspen/rust-gcd/tree/hax_fstar
+* https://github.com/cryspen/rust-gcd/tree/kani
+* https://github.com/cryspen/rust-gcd/tree/aeneas
+* https://github.com/cryspen/rust-gcd/tree/verus
 
 ## Preparation
 
