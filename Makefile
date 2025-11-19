@@ -8,7 +8,7 @@ AENEAS_OPTIONS ?=
 
 .PHONY: extract
 extract: gcd.llbc
-	$(AENEAS_EXE) -backend lean gcd.llbc -split-files -dest lean $(AENEAS_OPTIONS)
+	$(AENEAS_EXE) -backend lean gcd.llbc -split-files -dest proofs/Gcd $(AENEAS_OPTIONS)
 
 gcd.llbc: $(wildcard */*.rs)
 	RUSTFLAGS="--cfg eurydice" $(CHARON_EXE) cargo --preset=aeneas --start-from crate::euclid_u8 --start-from crate::binary_u8

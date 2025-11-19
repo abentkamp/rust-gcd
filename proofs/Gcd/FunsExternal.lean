@@ -13,28 +13,3 @@ open gcd
    Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
    Name pattern: [core::num::{u8}::trailing_zeros] -/
 def core.num.U8.trailing_zeros : U8 → Result U32 := sorry
-
-/- [core::num::{u16}::trailing_zeros]:
-   Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
-   Name pattern: [core::num::{u16}::trailing_zeros] -/
-def core.num.U16.trailing_zeros : U16 → Result U32 := sorry
-
-/- [core::num::{u32}::trailing_zeros]:
-   Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
-   Name pattern: [core::num::{u32}::trailing_zeros] -/
-def core.num.U32.trailing_zeros : U32 → Result U32 := sorry
-
-/- [core::num::{u64}::trailing_zeros]:
-   Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
-   Name pattern: [core::num::{u64}::trailing_zeros] -/
-def core.num.U64.trailing_zeros : U64 → Result U32 := sorry
-
-/- [core::num::{u128}::trailing_zeros]:
-   Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
-   Name pattern: [core::num::{u128}::trailing_zeros] -/
-def core.num.U128.trailing_zeros : U128 → Result U32 := sorry
-
-/- [core::num::{usize}::trailing_zeros]:
-   Source: '/rustc/library/core/src/num/uint_macros.rs', lines 152:8-152:48
-   Name pattern: [core::num::{usize}::trailing_zeros] -/
-def core.num.Usize.trailing_zeros : Usize → Result U32 := sorry

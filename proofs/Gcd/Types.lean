@@ -8,11 +8,4 @@ set_option linter.unusedVariables false
 
 namespace gcd
 
-/- Trait declaration: [gcd::Gcd]
-   Source: 'src/lib.rs', lines 4:0-30:1 -/
-structure Gcd (Self : Type) where
-  gcd_ : Self → Self → Result Self
-  gcd_binary : Self → Self → Result Self
-  gcd_euclid : Self → Self → Result Self
-
 end gcd
